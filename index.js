@@ -7,8 +7,10 @@
 
 var q = require("q"),
     _ = require("lodash"),
-    http = require("http"),
-    https = require("https"),
+    simpleGet = require("simple-get"),
+    concatStream = require("concat-stream"),
+    //http = require("http"),
+    //https = require("https"),
     jsdom = require("jsdom"),
     CONSTANTS = {
         HTTP_PROTOCOL: "http://",
@@ -23,38 +25,35 @@ var q = require("q"),
     };
 
 function getURL( url ) {
-    //console.log( "getURL: \"" + url + "\"");
-    var curl = beginsWith( CONSTANTS.HTTPS_PROTOCOL, url ) ? https : http;
     return q.Promise( function( resolve, reject ) {
-        //console.log( "requesting: \"" + url + "\"" );
-        curl.get( url, function( res ) {
-            //console.log("got response: \"" + url + "\"");
-            res.on("data", function( data ) {
-                resolve( {
-                    url: url,
-                    response: res,
-                    data: data
-                } );
-            });
-            setTimeout( function() {
-                reject( "timeout: " + url );
-            }, 3000 );
-            res.on("error", reject);
-        }).on("error", function( error ) {
-            reject( error );
-        });
+        simpleGet( url, function( err, res ) {
+            if ( err ) {
+                reject( err );
+            } else {
+                res.pipe( concatStream( function( data ) {
+                    resolve( {
+                        url: url,
+                        response: res,
+                        data: data
+                    } );
+                } ) );
+            }
+        } );
     } );
 }
 
 function beginsWith( prefix, s ) {
+    //console.log( "beginsWith", prefix, s );
     return prefix === s.substr(0, prefix.length);
 }
 
 function endsWith( suffix, s ) {
+    //console.log( "endsWith", suffix, s )
     return suffix === s.substr(s.length - suffix.length );
 }
 
 function removeTrailingSlashes( s ) {
+    //console.log( "removeTrailingSlashes", s );
     while( endsWith( "/", s ) ) {
         s = s.substr( 0, s.length - 1 );
     }
@@ -76,6 +75,10 @@ function validateURL( url, useHttps ) {
         },
         ""
     );
+    //console.log( "validateURL", url, useHttps );
+    if ( !protocol && url.indexOf(":") >= 1 ) {
+        return url;
+    }
     return (useHttps ?
         CONSTANTS.HTTPS_PROTOCOL :
         CONSTANTS.HTTP_PROTOCOL) + url.substr( protocol.length );
@@ -123,7 +126,12 @@ function parseHtml( baseURL, opts, cache, htmlString ) {
         .then( function( window ) {
             return _.chain( window.$("a") )
                 .map( function( a ) {
-                    var url = window.$(a).attr("href");
+                    return window.$(a).attr("href");
+                } )
+                .filter( function( url ) {
+                    return !!url;
+                } )
+                .map( function( url ) {
                     if ( beginsWith( "/", url ) ) {
                         url = baseURL + url;
                     }

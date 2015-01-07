@@ -8,7 +8,9 @@ var crawler = require("./index.js");
 
 crawler( "www.pluspol-interactive.de" )
     .then( function( res ) {
-        console.log( "Response:", res );
+        res.forEach( function( url ) {
+            console.log( url );
+        } );
     }, function( error ) {
         console.log( "Error:", error );
     } );
