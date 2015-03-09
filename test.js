@@ -6,11 +6,15 @@
 
 var crawler = require("./index.js");
 
-crawler( "www.pluspol-interactive.de" )
+crawler( {
+    url: "http://www.innovationlab.de/",
+    useHttps: false
+} )
     .then( function( res ) {
         res.forEach( function( url ) {
             console.log( url );
         } );
     }, function( error ) {
-        console.log( "Error:", error );
+        console.log( "An Error occurred:" );
+        console.log( error );
     } );

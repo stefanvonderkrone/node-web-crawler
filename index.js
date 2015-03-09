@@ -28,7 +28,10 @@ function getURL( url ) {
     return q.Promise( function( resolve, reject ) {
         simpleGet( url, function( err, res ) {
             if ( err ) {
-                reject( err );
+                reject( {
+                    msg: "failed getting url: " + url,
+                    origError: err
+                } );
             } else {
                 res.pipe( concatStream( function( data ) {
                     resolve( {
@@ -109,73 +112,14 @@ function isHtml(headers) {
     }
 }
 
-function parseHtml( baseURL, opts, cache, htmlString ) {
-    return q.Promise( function( resolve, reject ) {
-            jsdom.env(
-                htmlString,
-                ["http://code.jquery.com/jquery.js"],
-                function( err, window ) {
-                    if ( err ) {
-                        reject( err );
-                    } else {
-                        resolve( window );
-                    }
-                }
-            );
-        } )
-        .then( function( window ) {
-            return _.chain( window.$("a") )
-                .map( function( a ) {
-                    return window.$(a).attr("href");
-                } )
-                .filter( function( url ) {
-                    return !!url;
-                } )
-                .map( function( url ) {
-                    if ( beginsWith( "/", url ) ) {
-                        url = baseURL + url;
-                    }
-                    return validateURL(
-                        removeTrailingSlashes(
-                            removeHash( url )
-                        ),
-                        opts.useHttps
-                    );
-                } )
-                .uniq()
-                .filter( function( url ) {
-                    return baseURL !== url &&
-                        !_.contains( cache, url ) &&
-                        beginsWith( baseURL, url );
-                } )
-                .value();
-        } )
-        .then( function( urls ) {
-            return q.all( _.map( urls, function( url ) {
-                return getURL( url )
-                    .then( function( o ) {
-                        return handleInitial( opts, cache.concat( urls ), o );
-                    }, function() {
-                        return url;
-                    } );
-            } ) );
-        } );
-}
-
-function handleInitial( opts, cache, o ) {
-    var headers = o.response.headers,
-        charset = parseCharset( headers ),
-        isHTML = isHtml( headers);
-    return q.all( [ o.url ].concat( isHTML ? parseHtml( o.url, opts, cache, o.data.toString( charset ) ) : [] ) )
-        .then( _.flatten );
-}
 
 /**
  *
  * @param options
  */
 function crawl( options ) {
-    var url, opts;
+    var cache = [],
+        url, opts;
     if (_.isString( options ) ) {
         url = options;
         opts = _.assign( {}, DEFAULTS );
@@ -183,13 +127,83 @@ function crawl( options ) {
         opts = _.assign( _.assign({}, DEFAULTS), options || {} );
         url = options.url;
     }
+
+    function parseHtml( baseURL, opts, htmlString ) {
+        return q.Promise( function( resolve, reject ) {
+                jsdom.env(
+                    htmlString,
+                    ["http://code.jquery.com/jquery.js"],
+                    function( err, window ) {
+                        if ( err ) {
+                            reject( {
+                                msg: "Failed parsing DOM from url: " + baseURL,
+                                origError: err
+                            } );
+                        } else {
+                            resolve( window );
+                        }
+                    }
+                );
+            } )
+            .then( function( window ) {
+                return _.chain( window.$("a") )
+                    .map( function( a ) {
+                        return window.$(a).attr("href");
+                    } )
+                    .filter( function( url ) {
+                        return !!url;
+                    } )
+                    .map( function( url ) {
+                        if ( beginsWith( "/", url ) ) {
+                            url = baseURL + url;
+                        }
+                        return validateURL(
+                            removeTrailingSlashes(
+                                removeHash( url )
+                            ),
+                            opts.useHttps
+                        );
+                    } )
+                    .uniq()
+                    .filter( function( url ) {
+                        //console.log("url:", url, baseURL !== url,
+                        //!_.contains( cache, url ),
+                        //beginsWith( baseURL, url ));
+                        return baseURL !== url &&
+                            !_.contains( cache, url ) &&
+                            beginsWith( baseURL, url );
+                    } )
+                    .value();
+            } )
+            .then( function( urls ) {
+                cache = cache.concat( urls );
+                return q.all( _.map( urls, function( url ) {
+                    return getURL( url )
+                        .then( function( o ) {
+                            return handleInitial( opts, o );
+                        }, function() {
+                            return url;
+                        } );
+                } ) );
+            } );
+    }
+
+    function handleInitial( opts, o ) {
+        var headers = o.response.headers,
+            charset = parseCharset( headers ),
+            isHTML = isHtml( headers);
+        console.log( o.url );
+        return q.all( [ o.url ].concat( isHTML ? parseHtml( opts.url, opts, o.data.toString( charset ) ) : [] ) )
+            .then( _.flatten );
+    }
+
     return q.Promise( function( resolve, reject ) {
         if ( url === "" ) {
             reject( "No URL given!" );
         } else {
             getURL( validateURL( url, opts.useHttps ) )
                 .then(function( o ) {
-                    return handleInitial( opts, [], o );
+                    return handleInitial( opts, o );
                 })
                 .then(resolve, reject);
         }
