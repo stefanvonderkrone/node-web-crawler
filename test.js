@@ -11,6 +11,7 @@ crawler( {
     useHttps: false
 } )
     .then( function( res ) {
+        console.log( "done:" );
         res.forEach( function( url ) {
             console.log( url );
         } );

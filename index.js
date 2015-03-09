@@ -45,6 +45,27 @@ function getURL( url ) {
     } );
 }
 
+function headUR( url ) {
+    return q.Promise( function( resolve, reject ) {
+        simpleGet( {
+            url: url,
+            method: "HEAD"
+        }, function( err, res ) {
+            if ( err ) {
+                reject( {
+                    msg: "failed headding url:" + url,
+                    origError: err
+                } );
+            } else {
+                resolve( {
+                    url: url,
+                    response: res
+                } );
+            }
+        } );
+    } );
+}
+
 function beginsWith( prefix, s ) {
     //console.log( "beginsWith", prefix, s );
     return prefix === s.substr(0, prefix.length);
@@ -178,13 +199,50 @@ function crawl( options ) {
             .then( function( urls ) {
                 cache = cache.concat( urls );
                 return q.all( _.map( urls, function( url ) {
-                    return getURL( url )
-                        .then( function( o ) {
-                            return handleInitial( opts, o );
-                        }, function() {
-                            return url;
-                        } );
-                } ) );
+                    //    return headUR(url);
+                    //} ) )
+                    //.then( function( headResponses ) {
+                        //return q.all(
+                        //    _.chain( headResponses )
+                        //        .filter( function( o ) {
+                        //            console.log( o );
+                        //            return isHtml( o.res.headers );
+                        //        } )
+                        //        .map( function( o ) {
+                        //            return getURL( o.url )
+                        //                .then( function( o ) {
+                        //                    if ( o.response.statusCode >= 400 ) {
+                        //                        return o.url;
+                        //                    } else {
+                        //                        return handleInitial( opts, o );
+                        //                    }
+                        //                } )
+                        //                .then( undefined, function() {
+                        //                    return o.url;
+                        //                } );
+                        //        } )
+                        //        .value()
+                        //);
+                        return getURL( url )
+                            .then( function( o ) {
+                                if (o.response.statusCode >= 400 ) {
+                                    return url;
+                                } else {
+                                    if ( isHtml( o.response.headers ) ) {
+                                        return handleInitial( opts, o );
+                                    } else {
+                                        return undefined;
+                                    }
+                                }
+                            }, function() {
+                                return url;
+                            } );
+                    } ) );
+            } )
+            .then( function( urls ) {
+                return _.filter( urls, function( url ) {
+                    return !!url;
+                } );
             } );
     }
 
@@ -192,7 +250,7 @@ function crawl( options ) {
         var headers = o.response.headers,
             charset = parseCharset( headers ),
             isHTML = isHtml( headers);
-        console.log( o.url );
+        //console.log( o.url );
         return q.all( [ o.url ].concat( isHTML ? parseHtml( opts.url, opts, o.data.toString( charset ) ) : [] ) )
             .then( _.flatten );
     }
