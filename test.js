@@ -6,16 +6,16 @@
 
 var crawler = require("./index.js");
 
-crawler( {
-    url: "http://www.innovationlab.de/",
-    useHttps: false
+crawler( "https://www.enviam.de/", {
+    useHttps: true
 } )
     .then( function( res ) {
         console.log( "done:" );
         res.forEach( function( url ) {
             console.log( url );
         } );
-    }, function( error ) {
+    } )
+    .then( undefined, function( error ) {
         console.log( "An Error occurred:" );
         console.log( error );
     } );
